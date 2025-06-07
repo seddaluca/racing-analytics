@@ -262,6 +262,115 @@ async def stop_session(session_id: str):
         logger.error("Errore stop sessione", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
+async def get_current_vehicle_info():
+    """Ottieni informazioni del veicolo della sessione corrente"""
+    if not telemetry_manager.current_session or not telemetry_manager.db_pool:
+        return {"name": "Sconosciuto", "manufacturer": ""}
+
+    try:
+        async with telemetry_manager.db_pool.acquire() as conn:
+            vehicle_data = await conn.fetchrow("""
+                SELECT v.name, v.manufacturer, v.game_car_id
+                FROM sessions s
+                JOIN vehicles v ON s.vehicle_id = v.id
+                WHERE s.id = $1
+            """, telemetry_manager.current_session)
+
+            if vehicle_data:
+                return {
+                    "name": vehicle_data["name"],
+                    "manufacturer": vehicle_data["manufacturer"] or "",
+                    "game_car_id": vehicle_data["game_car_id"]
+                }
+    except Exception as e:
+        logger.error("Errore recupero info veicolo", error=str(e))
+
+    return {"name": "Sconosciuto", "manufacturer": ""}
+
+async def broadcast_telemetry(packet: Packet):
+    """Invia telemetria via Socket.IO ai client connessi"""
+    if not telemetry_manager.connected_clients:
+        return
+
+    # Ottieni informazioni veicolo dalla sessione corrente
+    vehicle_info = await get_current_vehicle_info()
+
+    # Se il gioco è in pausa o la macchina non è in pista, azzera i dati dinamici
+    is_paused = packet.flags.paused or not packet.flags.car_on_track
+
+    # Dati del veicolo (sempre disponibili anche in pausa)
+    vehicle_data = {
+        "oil_pressure": packet.oil_pressure,
+        "oil_temperature": packet.oil_temperature,
+        "water_temperature": packet.water_temperature,
+        "fuel_level": packet.gas_level,
+        "fuel_capacity": packet.gas_capacity,
+        "fuel_percentage": (packet.gas_level / packet.gas_capacity * 100) if packet.gas_capacity > 0 else 0,
+        "turbo_boost": packet.turbo_boost,
+        "tire_temperatures": {
+            "front_left": packet.wheels.front_left.temperature,
+            "front_right": packet.wheels.front_right.temperature,
+            "rear_left": packet.wheels.rear_left.temperature,
+            "rear_right": packet.wheels.rear_right.temperature
+        }
+    }
+
+    if is_paused:
+        # Dati azzerati quando in pausa
+        telemetry_data = {
+            "timestamp": packet.received_time,
+            "speed": 0,
+            "rpm": 0,
+            "gear": "N",  # Neutro quando fermo
+            "throttle": 0,
+            "brake": 0,
+            "position": {
+                "x": packet.position.x,  # Mantieni posizione attuale
+                "y": packet.position.y,
+                "z": packet.position.z
+            },
+            "vehicle": {
+                "car_id": packet.car_id,  # ID del veicolo da GT7
+                "name": vehicle_info.get("name", "Sconosciuto"),
+                "manufacturer": vehicle_info.get("manufacturer", ""),
+                **vehicle_data  # Aggiungi dati veicolo
+            },
+            "flags": {
+                "on_track": packet.flags.car_on_track,
+                "paused": packet.flags.paused
+            },
+            "status": "paused"  # Indicatore di stato
+        }
+    else:
+        # Dati normali quando in movimento
+        telemetry_data = {
+            "timestamp": packet.received_time,
+            "speed": packet.car_speed * 3.6,  # m/s to km/h
+            "rpm": packet.engine_rpm,
+            "gear": packet.current_gear if packet.current_gear is not None else "N",
+            "throttle": packet.throttle / 255.0,
+            "brake": packet.brake / 255.0,
+            "position": {
+                "x": packet.position.x,
+                "y": packet.position.y,
+                "z": packet.position.z
+            },
+            "vehicle": {
+                "car_id": packet.car_id,  # ID del veicolo da GT7
+                "name": vehicle_info.get("name", "Sconosciuto"),
+                "manufacturer": vehicle_info.get("manufacturer", ""),
+                **vehicle_data  # Aggiungi dati veicolo
+            },
+            "flags": {
+                "on_track": packet.flags.car_on_track,
+                "paused": packet.flags.paused
+            },
+            "status": "active"
+        }
+
+    # Invia a tutti i client connessi
+    await sio.emit('telemetry_data', telemetry_data)
+
 async def start_telemetry_capture():
     """Task asincrono per cattura telemetria dalla PlayStation"""
     logger.info("Avvio cattura telemetria", playstation_ip=settings.playstation_ip)
@@ -357,32 +466,6 @@ async def process_telemetry_packet(packet: Packet):
 
     except Exception as e:
         logger.error("Errore salvataggio telemetria", error=str(e))
-
-async def broadcast_telemetry(packet: Packet):
-    """Invia telemetria via Socket.IO ai client connessi"""
-    if not telemetry_manager.connected_clients:
-        return
-
-    telemetry_data = {
-        "timestamp": packet.received_time,
-        "speed": packet.car_speed * 3.6,
-        "rpm": packet.engine_rpm,
-        "gear": packet.current_gear,
-        "throttle": packet.throttle / 255.0,
-        "brake": packet.brake / 255.0,
-        "position": {
-            "x": packet.position.x,
-            "y": packet.position.y,
-            "z": packet.position.z
-        },
-        "flags": {
-            "on_track": packet.flags.car_on_track,
-            "paused": packet.flags.paused
-        }
-    }
-
-    # Invia a tutti i client connessi
-    await sio.emit('telemetry_data', telemetry_data)
 
 # Usa socket_app invece di app
 app = socket_app

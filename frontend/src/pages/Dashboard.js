@@ -74,6 +74,15 @@ const Dashboard = () => {
     getLatestTelemetry
   } = useWebSocket();
 
+  // Funzione per determinare il colore delle gomme in base alla temperatura
+  const getTireColor = (temperature) => {
+    if (!temperature) return '#666';
+    if (temperature < 60) return '#00bcd4';   // Fredde - Azzurro
+    if (temperature < 80) return '#4caf50';   // Ideali - Verde
+    if (temperature < 100) return '#ff9800';  // Calde - Arancione
+    return '#f44336';                         // Troppo calde - Rosso
+  };
+
   // Query per dati dashboard
   const {
     data: dashboardData,
@@ -305,56 +314,339 @@ const Dashboard = () => {
           <Grid item xs={12} lg={8}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Sessione Live
-                </Typography>
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Typography variant="h6">
+                    Sessione Live
+                  </Typography>
+
+                  {/* Indicatore stato */}
+                  {realTimeTelemetry?.status && (
+                    <Chip
+                      icon={realTimeTelemetry.status === 'paused' ? <StopIcon /> : <PlayIcon />}
+                      label={realTimeTelemetry.status === 'paused' ? 'In Pausa' : 'Attivo'}
+                      color={realTimeTelemetry.status === 'paused' ? 'warning' : 'success'}
+                      variant="outlined"
+                    />
+                  )}
+                </Box>
+
+                {/* Informazioni Veicolo */}
+                {realTimeTelemetry?.vehicle && (
+                  <Box
+                    sx={{
+                      mb: 3,
+                      p: 2,
+                      backgroundColor: 'action.hover',
+                      borderRadius: 1,
+                      border: '1px solid',
+                      borderColor: 'divider'
+                    }}
+                  >
+                    <Typography variant="h6" gutterBottom>
+                      <CarIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                      Veicolo Corrente
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} md={4}>
+                        <Typography variant="body2" color="textSecondary">
+                          ID Veicolo (GT7)
+                        </Typography>
+                        <Typography variant="h6" sx={{ fontFamily: 'monospace' }}>
+                          {realTimeTelemetry.vehicle.car_id || 'N/A'}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={12} md={4}>
+                        <Typography variant="body2" color="textSecondary">
+                          Nome
+                        </Typography>
+                        <Typography variant="h6">
+                          {realTimeTelemetry.vehicle.name || 'Sconosciuto'}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={12} md={4}>
+                        <Typography variant="body2" color="textSecondary">
+                          Produttore
+                        </Typography>
+                        <Typography variant="h6">
+                          {realTimeTelemetry.vehicle.manufacturer || 'N/A'}
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Box>
+                )}
 
                 {realTimeTelemetry ? (
-                  <Grid container spacing={2}>
-                    <Grid item xs={6} md={3}>
-                      <Box textAlign="center">
-                        <Typography variant="h4" className="speed-indicator">
-                          {Math.round(realTimeTelemetry.speed || 0)}
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          km/h
-                        </Typography>
-                      </Box>
+                  <>
+                    <Grid container spacing={2}>
+                      <Grid item xs={6} md={3}>
+                        <Box textAlign="center">
+                          <Typography
+                            variant="h4"
+                            className="speed-indicator"
+                            sx={{
+                              opacity: realTimeTelemetry.status === 'paused' ? 0.5 : 1,
+                              color: realTimeTelemetry.status === 'paused' ? '#666' : '#ff6b00'
+                            }}
+                          >
+                            {Math.round(realTimeTelemetry.speed || 0)}
+                          </Typography>
+                          <Typography variant="body2" color="textSecondary">
+                            km/h
+                          </Typography>
+                        </Box>
+                      </Grid>
+
+                      <Grid item xs={6} md={3}>
+                        <Box textAlign="center">
+                          <Typography
+                            variant="h4"
+                            className="rpm-indicator"
+                            sx={{
+                              opacity: realTimeTelemetry.status === 'paused' ? 0.5 : 1,
+                              color: realTimeTelemetry.status === 'paused' ? '#666' : '#00bcd4'
+                            }}
+                          >
+                            {Math.round(realTimeTelemetry.rpm || 0)}
+                          </Typography>
+                          <Typography variant="body2" color="textSecondary">
+                            RPM
+                          </Typography>
+                        </Box>
+                      </Grid>
+
+                      <Grid item xs={6} md={3}>
+                        <Box textAlign="center">
+                          <Typography
+                            variant="h4"
+                            className="gear-indicator"
+                            sx={{
+                              opacity: realTimeTelemetry.status === 'paused' ? 0.5 : 1,
+                              color: realTimeTelemetry.status === 'paused' ? '#666' : '#ffffff'
+                            }}
+                          >
+                            {realTimeTelemetry.gear || 'N'}
+                          </Typography>
+                          <Typography variant="body2" color="textSecondary">
+                            Marcia
+                          </Typography>
+                        </Box>
+                      </Grid>
+
+                      <Grid item xs={6} md={3}>
+                        <Box textAlign="center">
+                          <Typography
+                            variant="h4"
+                            sx={{
+                              opacity: realTimeTelemetry.status === 'paused' ? 0.5 : 1,
+                              color: realTimeTelemetry.status === 'paused' ? '#666' : '#ffffff'
+                            }}
+                          >
+                            {Math.round((realTimeTelemetry.throttle || 0) * 100)}%
+                          </Typography>
+                          <Typography variant="body2" color="textSecondary">
+                            Acceleratore
+                          </Typography>
+                        </Box>
+                      </Grid>
+
+                      {/* Indicatori di stato aggiuntivi */}
+                      <Grid item xs={12}>
+                        <Box display="flex" gap={1} justifyContent="center" mt={2}>
+                          <Chip
+                            label={realTimeTelemetry.flags?.on_track ? 'In Pista' : 'Fuori Pista'}
+                            color={realTimeTelemetry.flags?.on_track ? 'success' : 'error'}
+                            variant="outlined"
+                            size="small"
+                          />
+
+                          {realTimeTelemetry.status === 'paused' && (
+                            <Chip
+                              label="Gioco in Pausa"
+                              color="warning"
+                              variant="outlined"
+                              size="small"
+                            />
+                          )}
+                        </Box>
+                      </Grid>
                     </Grid>
 
-                    <Grid item xs={6} md={3}>
-                      <Box textAlign="center">
-                        <Typography variant="h4" className="rpm-indicator">
-                          {Math.round(realTimeTelemetry.rpm || 0)}
+                    {/* Parametri Tecnici Veicolo */}
+                    {realTimeTelemetry?.vehicle && (
+                      <Box sx={{ mt: 3 }}>
+                        <Typography variant="h6" gutterBottom>
+                          📊 Parametri Veicolo
                         </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          RPM
-                        </Typography>
-                      </Box>
-                    </Grid>
 
-                    <Grid item xs={6} md={3}>
-                      <Box textAlign="center">
-                        <Typography variant="h4" className="gear-indicator">
-                          {realTimeTelemetry.gear || 'N'}
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          Marcia
-                        </Typography>
-                      </Box>
-                    </Grid>
+                        <Grid container spacing={2}>
+                          {/* Pressione Olio */}
+                          <Grid item xs={6} md={3}>
+                            <Card variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                              <Typography variant="body2" color="textSecondary">
+                                Pressione Olio
+                              </Typography>
+                              <Typography
+                                variant="h6"
+                                sx={{
+                                  color: (realTimeTelemetry.vehicle.oil_pressure || 0) < 2 ? '#f44336' : '#4caf50',
+                                  fontFamily: 'monospace'
+                                }}
+                              >
+                                {(realTimeTelemetry.vehicle.oil_pressure || 0).toFixed(1)} bar
+                              </Typography>
+                            </Card>
+                          </Grid>
 
-                    <Grid item xs={6} md={3}>
-                      <Box textAlign="center">
-                        <Typography variant="h4">
-                          {Math.round((realTimeTelemetry.throttle || 0) * 100)}%
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          Acceleratore
-                        </Typography>
+                          {/* Temperatura Olio */}
+                          <Grid item xs={6} md={3}>
+                            <Card variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                              <Typography variant="body2" color="textSecondary">
+                                Temp. Olio
+                              </Typography>
+                              <Typography
+                                variant="h6"
+                                sx={{
+                                  color: (realTimeTelemetry.vehicle.oil_temperature || 0) > 120 ? '#f44336' : '#4caf50',
+                                  fontFamily: 'monospace'
+                                }}
+                              >
+                                {Math.round(realTimeTelemetry.vehicle.oil_temperature || 0)}°C
+                              </Typography>
+                            </Card>
+                          </Grid>
+
+                          {/* Temperatura Acqua */}
+                          <Grid item xs={6} md={3}>
+                            <Card variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                              <Typography variant="body2" color="textSecondary">
+                                Temp. Acqua
+                              </Typography>
+                              <Typography
+                                variant="h6"
+                                sx={{
+                                  color: (realTimeTelemetry.vehicle.water_temperature || 0) > 100 ? '#f44336' : '#4caf50',
+                                  fontFamily: 'monospace'
+                                }}
+                              >
+                                {Math.round(realTimeTelemetry.vehicle.water_temperature || 0)}°C
+                              </Typography>
+                            </Card>
+                          </Grid>
+
+                          {/* Carburante */}
+                          <Grid item xs={6} md={3}>
+                            <Card variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                              <Typography variant="body2" color="textSecondary">
+                                Carburante
+                              </Typography>
+                              <Typography
+                                variant="h6"
+                                sx={{
+                                  color: (realTimeTelemetry.vehicle.fuel_percentage || 0) < 10 ? '#f44336' :
+                                         (realTimeTelemetry.vehicle.fuel_percentage || 0) < 25 ? '#ff9800' : '#4caf50',
+                                  fontFamily: 'monospace'
+                                }}
+                              >
+                                {Math.round(realTimeTelemetry.vehicle.fuel_percentage || 0)}%
+                              </Typography>
+                              <Typography variant="caption" color="textSecondary">
+                                {(realTimeTelemetry.vehicle.fuel_level || 0).toFixed(1)}L / {(realTimeTelemetry.vehicle.fuel_capacity || 0).toFixed(1)}L
+                              </Typography>
+                            </Card>
+                          </Grid>
+
+                          {/* Turbo Boost */}
+                          {(realTimeTelemetry.vehicle.turbo_boost || 0) > 0 && (
+                            <Grid item xs={6} md={3}>
+                              <Card variant="outlined" sx={{ p: 1.5, textAlign: 'center' }}>
+                                <Typography variant="body2" color="textSecondary">
+                                  Turbo Boost
+                                </Typography>
+                                <Typography
+                                  variant="h6"
+                                  sx={{
+                                    color: '#00bcd4',
+                                    fontFamily: 'monospace'
+                                  }}
+                                >
+                                  {(realTimeTelemetry.vehicle.turbo_boost || 0).toFixed(2)} bar
+                                </Typography>
+                              </Card>
+                            </Grid>
+                          )}
+                        </Grid>
+
+                        {/* Temperature Gomme */}
+                        <Box sx={{ mt: 2 }}>
+                          <Typography variant="body2" color="textSecondary" gutterBottom>
+                            🏎️ Temperature Gomme
+                          </Typography>
+                          <Grid container spacing={1}>
+                            <Grid item xs={6}>
+                              <Box display="flex" justifyContent="space-between">
+                                <Card variant="outlined" sx={{ p: 1, flex: 1, mr: 0.5, textAlign: 'center' }}>
+                                  <Typography variant="caption" color="textSecondary">AS</Typography>
+                                  <Typography
+                                    variant="body2"
+                                    sx={{
+                                      color: getTireColor(realTimeTelemetry.vehicle.tire_temperatures?.front_left),
+                                      fontFamily: 'monospace',
+                                      fontWeight: 'bold'
+                                    }}
+                                  >
+                                    {Math.round(realTimeTelemetry.vehicle.tire_temperatures?.front_left || 0)}°
+                                  </Typography>
+                                </Card>
+                                <Card variant="outlined" sx={{ p: 1, flex: 1, ml: 0.5, textAlign: 'center' }}>
+                                  <Typography variant="caption" color="textSecondary">AD</Typography>
+                                  <Typography
+                                    variant="body2"
+                                    sx={{
+                                      color: getTireColor(realTimeTelemetry.vehicle.tire_temperatures?.front_right),
+                                      fontFamily: 'monospace',
+                                      fontWeight: 'bold'
+                                    }}
+                                  >
+                                    {Math.round(realTimeTelemetry.vehicle.tire_temperatures?.front_right || 0)}°
+                                  </Typography>
+                                </Card>
+                              </Box>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Box display="flex" justifyContent="space-between">
+                                <Card variant="outlined" sx={{ p: 1, flex: 1, mr: 0.5, textAlign: 'center' }}>
+                                  <Typography variant="caption" color="textSecondary">PS</Typography>
+                                  <Typography
+                                    variant="body2"
+                                    sx={{
+                                      color: getTireColor(realTimeTelemetry.vehicle.tire_temperatures?.rear_left),
+                                      fontFamily: 'monospace',
+                                      fontWeight: 'bold'
+                                    }}
+                                  >
+                                    {Math.round(realTimeTelemetry.vehicle.tire_temperatures?.rear_left || 0)}°
+                                  </Typography>
+                                </Card>
+                                <Card variant="outlined" sx={{ p: 1, flex: 1, ml: 0.5, textAlign: 'center' }}>
+                                  <Typography variant="caption" color="textSecondary">PD</Typography>
+                                  <Typography
+                                    variant="body2"
+                                    sx={{
+                                      color: getTireColor(realTimeTelemetry.vehicle.tire_temperatures?.rear_right),
+                                      fontFamily: 'monospace',
+                                      fontWeight: 'bold'
+                                    }}
+                                  >
+                                    {Math.round(realTimeTelemetry.vehicle.tire_temperatures?.rear_right || 0)}°
+                                  </Typography>
+                                </Card>
+                              </Box>
+                            </Grid>
+                          </Grid>
+                        </Box>
                       </Box>
-                    </Grid>
-                  </Grid>
+                    )}
+                  </>
                 ) : (
                   <Box display="flex" justifyContent="center" p={4}>
                     <CircularProgress />
